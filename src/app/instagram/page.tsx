@@ -11,7 +11,6 @@ import {
   FileEdit,
   CheckCircle2,
   Archive,
-  Filter,
   Search,
   MoreVertical,
   Trash2,
@@ -21,7 +20,6 @@ import {
   ImageIcon,
   Video,
   LayoutGrid,
-  MessageSquare,
 } from "lucide-react";
 import {
   Card,

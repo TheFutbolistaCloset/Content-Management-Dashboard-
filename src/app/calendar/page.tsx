@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Clock,
   CheckCircle2,
-  Camera,
   Video,
   LayoutGrid,
   ImageIcon,
@@ -292,7 +291,7 @@ export default function CalendarPage() {
       </Card>
 
       {/* Month Stats */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
         {[
           { count: scheduledCount, ...STATUS_CONFIG.scheduled },
           { count: publishedCount, ...STATUS_CONFIG.published },
@@ -315,9 +314,9 @@ export default function CalendarPage() {
         })}
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         {/* Calendar Grid */}
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -480,7 +479,7 @@ export default function CalendarPage() {
 
         {/* Detail Sidebar */}
         {selectedDate && (
-          <div className="w-80 flex-shrink-0">
+          <div className="w-full flex-shrink-0 lg:w-80">
             <Card className="sticky top-8">
               <CardHeader>
                 <div className="flex items-center justify-between">

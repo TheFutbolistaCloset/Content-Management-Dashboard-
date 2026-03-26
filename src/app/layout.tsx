@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body>
         <Sidebar />
-        <main className="ml-64 min-h-screen p-8">{children}</main>
+        <main className="min-h-screen p-4 pt-16 md:ml-64 md:p-8">{children}</main>
       </body>
     </html>
   );

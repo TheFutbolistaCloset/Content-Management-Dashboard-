@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import {
   Camera,
@@ -14,6 +15,7 @@ const sections = [
     icon: Camera,
     href: "/instagram",
     stat: "12 scheduled",
+    progress: 65,
   },
   {
     title: "Analytics",
@@ -21,6 +23,7 @@ const sections = [
     icon: BarChart3,
     href: "/analytics",
     stat: "+24% this week",
+    progress: 78,
   },
   {
     title: "Content Calendar",
@@ -28,6 +31,7 @@ const sections = [
     icon: Calendar,
     href: "/calendar",
     stat: "8 upcoming",
+    progress: 42,
   },
   {
     title: "Competitor Tracker",
@@ -35,13 +39,15 @@ const sections = [
     icon: Users,
     href: "/competitors",
     stat: "5 tracked",
+    progress: 55,
   },
   {
     title: "News Consolidator",
     description: "Aggregate industry news and trending topics.",
     icon: Newspaper,
     href: "/news",
-    stat: "34 new articles",
+    stat: "18 articles",
+    progress: 90,
   },
 ];
 
@@ -57,7 +63,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {sections.map((section) => (
-          <a key={section.href} href={section.href}>
+          <Link key={section.href} href={section.href}>
             <Card className="transition-colors hover:border-primary/50">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -73,12 +79,12 @@ export default function DashboardPage() {
                 <div className="h-2 w-full rounded-full bg-muted">
                   <div
                     className="h-2 rounded-full bg-primary"
-                    style={{ width: `${Math.random() * 60 + 20}%` }}
+                    style={{ width: `${section.progress}%` }}
                   />
                 </div>
               </CardContent>
             </Card>
-          </a>
+          </Link>
         ))}
       </div>
     </div>

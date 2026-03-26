@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import {
-  ExternalLink,
   Newspaper,
   Clock,
   Rss,
