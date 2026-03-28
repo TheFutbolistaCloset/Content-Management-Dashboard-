@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Eye,
   TrendingUp,
@@ -14,6 +14,9 @@ import {
   CalendarDays,
   ChevronDown,
   Camera,
+  Wifi,
+  WifiOff,
+  Loader2,
 } from "lucide-react";
 import {
   Card,
@@ -134,17 +137,71 @@ export default function AnalyticsPage() {
   const [customFrom, setCustomFrom] = useState("2026-02-24");
   const [customTo, setCustomTo] = useState("2026-03-26");
   const [showPresets, setShowPresets] = useState(false);
+  const [dataSource, setDataSource] = useState<"instagram" | "demo">("demo");
+  const [igMetrics, setIgMetrics] = useState<null | { date: string; impressions: number; reach: number; profileViews: number; followers: number; followerGrowth: number; }[]>(null);
+  const [igFollowers, setIgFollowers] = useState<number | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
 
   const dateRange: DateRange = useMemo(() => {
     if (presetKey === "custom") return { from: customFrom, to: customTo };
     return getPresetRange(presetKey);
   }, [presetKey, customFrom, customTo]);
 
-  // Fetch Metricool data
-  const dailyMetrics = useMemo(
+  // Try fetching real Instagram Insights; fall back to Metricool mock silently
+  const fetchInsights = useCallback(async () => {
+    setInsightsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/analytics/insights?since=${dateRange.from}&until=${dateRange.to}`
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json.configured && json.metrics?.length) {
+          setIgMetrics(json.metrics);
+          setIgFollowers(json.followerCount ?? null);
+          setDataSource("instagram");
+          setInsightsLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // fall through to mock
+    }
+    setIgMetrics(null);
+    setDataSource("demo");
+    setInsightsLoading(false);
+  }, [dateRange]);
+
+  useEffect(() => {
+    fetchInsights();
+  }, [fetchInsights]);
+
+  // Metricool mock data (always available as fallback)
+  const mockDailyMetrics = useMemo(
     () => fetchMetricoolDailyMetrics(dateRange),
     [dateRange]
   );
+
+  // Use Instagram Insights when available, otherwise Metricool mock
+  const dailyMetrics = useMemo(() => {
+    if (dataSource === "instagram" && igMetrics) {
+      return igMetrics.map((m) => ({
+        date: m.date,
+        impressions: m.impressions,
+        reach: m.reach,
+        engagement: Math.round(m.impressions * 0.04),
+        followers: m.followers,
+        followerGrowth: m.followerGrowth,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        clicks: m.profileViews,
+      }));
+    }
+    return mockDailyMetrics;
+  }, [dataSource, igMetrics, mockDailyMetrics]);
+
   const topPosts = useMemo(
     () => fetchMetricoolTopPosts(dateRange),
     [dateRange]
@@ -157,7 +214,13 @@ export default function AnalyticsPage() {
     () => fetchMetricoolEngagementBreakdown(),
     []
   );
-  const agg = useMemo(() => aggregateMetrics(dailyMetrics), [dailyMetrics]);
+  const agg = useMemo(() => {
+    const base = aggregateMetrics(dailyMetrics);
+    if (dataSource === "instagram" && igFollowers !== null) {
+      return { ...base, currentFollowers: igFollowers };
+    }
+    return base;
+  }, [dailyMetrics, dataSource, igFollowers]);
   const weeklyData = useMemo(() => bucketByWeek(dailyMetrics), [dailyMetrics]);
 
   // Chart data for daily line chart
@@ -218,9 +281,32 @@ export default function AnalyticsPage() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Analytics</h1>
-          <p className="mt-1 text-muted-foreground">
-            Content performance metrics synced from Metricool.
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-muted-foreground">
+              {dataSource === "instagram"
+                ? "Live data from Instagram Insights."
+                : "Demo data — connect Instagram to see real metrics."}
+            </p>
+            {insightsLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <span
+                className={cn(
+                  "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  dataSource === "instagram"
+                    ? "bg-green-400/10 text-green-400"
+                    : "bg-yellow-400/10 text-yellow-400"
+                )}
+              >
+                {dataSource === "instagram" ? (
+                  <Wifi className="h-2.5 w-2.5" />
+                ) : (
+                  <WifiOff className="h-2.5 w-2.5" />
+                )}
+                {dataSource === "instagram" ? "Live" : "Demo"}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Date Picker */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Camera,
   Image,
@@ -20,12 +20,12 @@ import {
   ImageIcon,
   Video,
   LayoutGrid,
+  Database,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import {
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
   CardContent,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -43,6 +43,8 @@ interface Post {
   likes?: number;
   comments?: number;
   hashtags: string[];
+  instagramId?: string;
+  permalink?: string;
 }
 
 const POST_TYPE_CONFIG: Record<PostType, { label: string; icon: typeof Image }> = {
@@ -82,7 +84,8 @@ const STATUS_CONFIG: Record<
   },
 };
 
-const INITIAL_POSTS: Post[] = [
+// Fallback data shown when Supabase is not configured
+const DEMO_POSTS: Post[] = [
   {
     id: "1",
     caption: "New collection drop! Explore our latest streetwear essentials 🔥",
@@ -205,12 +208,39 @@ function formatDateTime(dateStr: string) {
 }
 
 export default function InstagramPage() {
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<"supabase" | "demo">("demo");
   const [activeTab, setActiveTab] = useState<PostStatus | "all">("all");
   const [showNewPostForm, setShowNewPostForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
+  // Load posts on mount
+  useEffect(() => {
+    loadPosts();
+  }, []);
+
+  async function loadPosts() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/posts");
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(data);
+        setDataSource("supabase");
+      } else {
+        setPosts(DEMO_POSTS);
+        setDataSource("demo");
+      }
+    } catch {
+      setPosts(DEMO_POSTS);
+      setDataSource("demo");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const filteredPosts = posts.filter((post) => {
     const matchesTab = activeTab === "all" || post.status === activeTab;
@@ -231,38 +261,99 @@ export default function InstagramPage() {
     backlog: posts.filter((p) => p.status === "backlog").length,
   };
 
-  function handleAddPost(post: Omit<Post, "id" | "createdAt">) {
-    const newPost: Post = {
-      ...post,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setPosts((prev) => [newPost, ...prev]);
+  async function handleAddPost(post: Omit<Post, "id" | "createdAt">) {
+    if (dataSource === "demo") {
+      const newPost: Post = {
+        ...post,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      setPosts((prev) => [newPost, ...prev]);
+      setShowNewPostForm(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(post),
+      });
+      if (res.ok) {
+        const newPost = await res.json();
+        setPosts((prev) => [newPost, ...prev]);
+      }
+    } catch {
+      // silent
+    }
     setShowNewPostForm(false);
   }
 
-  function handleUpdatePost(post: Omit<Post, "id" | "createdAt">) {
+  async function handleUpdatePost(post: Omit<Post, "id" | "createdAt">) {
     if (!editingPost) return;
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === editingPost.id
-          ? { ...p, ...post }
-          : p
-      )
-    );
+
+    if (dataSource === "demo") {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === editingPost.id ? { ...p, ...post } : p))
+      );
+      setEditingPost(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/posts/${editingPost.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(post),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts((prev) =>
+          prev.map((p) => (p.id === editingPost.id ? updated : p))
+        );
+      }
+    } catch {
+      // silent
+    }
     setEditingPost(null);
   }
 
-  function handleDeletePost(id: string) {
-    setPosts((prev) => prev.filter((p) => p.id !== id));
+  async function handleDeletePost(id: string) {
     setMenuOpenId(null);
+
+    if (dataSource === "demo") {
+      setPosts((prev) => prev.filter((p) => p.id !== id));
+      return;
+    }
+
+    try {
+      await fetch(`/api/posts/${id}`, { method: "DELETE" });
+      setPosts((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      // silent
+    }
+  }
+
+  const publishedPosts = posts.filter((p) => p.status === "published");
+  const totalLikes = publishedPosts.reduce((s, p) => s + (p.likes ?? 0), 0);
+  const totalComments = publishedPosts.reduce((s, p) => s + (p.comments ?? 0), 0);
+  const avgLikes = publishedPosts.length
+    ? Math.round(totalLikes / publishedPosts.length)
+    : 0;
+  const avgComments = publishedPosts.length
+    ? Math.round(totalComments / publishedPosts.length)
+    : 0;
+
+  function formatCompact(n: number) {
+    if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+    return n.toString();
   }
 
   const stats = [
     { label: "Total Posts", value: posts.length.toString(), icon: Image },
     { label: "Scheduled", value: counts.scheduled.toString(), icon: Clock },
-    { label: "Avg. Likes", value: "3.5K", icon: Heart },
-    { label: "Avg. Comments", value: "186", icon: MessageCircle },
+    { label: "Avg. Likes", value: formatCompact(avgLikes), icon: Heart },
+    { label: "Avg. Comments", value: avgComments.toString(), icon: MessageCircle },
   ];
 
   const tabs: { key: PostStatus | "all"; label: string }[] = [
@@ -282,16 +373,30 @@ export default function InstagramPage() {
             Manage your content pipeline — schedule, draft, publish, and plan.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingPost(null);
-            setShowNewPostForm(true);
-          }}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          New Post
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Data source badge */}
+          <span
+            className={cn(
+              "hidden items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium sm:flex",
+              dataSource === "supabase"
+                ? "bg-green-400/10 text-green-400"
+                : "bg-yellow-400/10 text-yellow-400"
+            )}
+          >
+            <Database className="h-3 w-3" />
+            {dataSource === "supabase" ? "Live — Supabase" : "Demo data"}
+          </span>
+          <button
+            onClick={() => {
+              setEditingPost(null);
+              setShowNewPostForm(true);
+            }}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            New Post
+          </button>
+        </div>
       </div>
 
       {/* Stats Row */}
@@ -313,13 +418,13 @@ export default function InstagramPage() {
 
       {/* Tabs + Search */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 activeTab === tab.key
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -345,8 +450,12 @@ export default function InstagramPage() {
         </div>
       </div>
 
-      {/* Posts Grid */}
-      {filteredPosts.length === 0 ? (
+      {/* Loading state */}
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : filteredPosts.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Archive className="mb-3 h-10 w-10 text-muted-foreground" />
@@ -415,6 +524,18 @@ export default function InstagramPage() {
                             <Edit3 className="h-3.5 w-3.5" />
                             Edit
                           </button>
+                          {post.permalink && (
+                            <a
+                              href={post.permalink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-muted"
+                              onClick={() => setMenuOpenId(null)}
+                            >
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              View on IG
+                            </a>
+                          )}
                           <button
                             onClick={() => handleDeletePost(post.id)}
                             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted"
@@ -427,7 +548,7 @@ export default function InstagramPage() {
                     </div>
                   </div>
 
-                  {/* Image placeholder */}
+                  {/* Image placeholder / Instagram thumbnail */}
                   <div className="mb-3 flex h-32 items-center justify-center rounded-md bg-muted/50">
                     <Camera className="h-8 w-8 text-muted-foreground/50" />
                   </div>
@@ -464,11 +585,11 @@ export default function InstagramPage() {
                       <div className="flex items-center gap-3">
                         <span className="flex items-center gap-1">
                           <Heart className="h-3 w-3" />
-                          {post.likes?.toLocaleString()}
+                          {post.likes?.toLocaleString() ?? "—"}
                         </span>
                         <span className="flex items-center gap-1">
                           <MessageCircle className="h-3 w-3" />
-                          {post.comments}
+                          {post.comments ?? "—"}
                         </span>
                       </div>
                     )}

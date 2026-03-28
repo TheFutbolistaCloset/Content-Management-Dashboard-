@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Newspaper,
   Clock,
@@ -12,6 +12,7 @@ import {
   Globe,
   Search,
   TrendingUp,
+  Loader2,
 } from "lucide-react";
 import {
   Card,
@@ -311,9 +312,25 @@ function formatPublishDate(dateStr: string): string {
 }
 
 export default function NewsPage() {
-  const allItems = useMemo(() => fetchNewsItems(), []);
+  const [allItems, setAllItems] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTopic, setActiveTopic] = useState<NewsTopic | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    fetch("/api/news")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAllItems(data);
+        } else {
+          // API failed or returned empty — use inline mock
+          setAllItems(fetchNewsItems());
+        }
+      })
+      .catch(() => setAllItems(fetchNewsItems()))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filteredItems = useMemo(() => {
     return allItems.filter((item) => {
@@ -366,11 +383,19 @@ export default function NewsPage() {
         </div>
 
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm text-muted-foreground">
-          <Rss className="h-4 w-4 text-primary" />
-          <span>{allItems.length} articles</span>
-          <span className="text-border">|</span>
-          <Clock className="h-3.5 w-3.5" />
-          <span>Updated just now</span>
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          ) : (
+            <Rss className="h-4 w-4 text-primary" />
+          )}
+          <span>{loading ? "Loading…" : `${allItems.length} articles`}</span>
+          {!loading && (
+            <>
+              <span className="text-border">|</span>
+              <Clock className="h-3.5 w-3.5" />
+              <span>Updated just now</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -434,7 +459,11 @@ export default function NewsPage() {
       </div>
 
       {/* Articles Grid */}
-      {filteredItems.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : filteredItems.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Newspaper className="mb-3 h-10 w-10 text-muted-foreground" />
